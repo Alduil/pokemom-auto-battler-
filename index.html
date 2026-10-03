@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Pokémon Auto-Battler IA</title>
+    <!-- Configurações para rodar como App nativo no iOS/iPadOS -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <style>
+        * { box-sizing: border-box; font-family: 'Courier New', Courier, monospace; }
+        body { background-color: #f0f0f0; display: flex; flex-direction: column; align-items: center; padding: 20px; -webkit-touch-callout: none; -webkit-user-select: none; }
+        h1, h2 { color: #333; text-align: center; margin-top: 5px; font-size: 18px; }
+        
+        #game-container { background: white; border: 4px solid #333; border-radius: 10px; width: 100%; max-width: 750px; padding: 20px; box-shadow: 5px 5px 0px #888; }
+        .screen { display: none; }
+        .active { display: block; }
+
+        /* Escolha de Treinador */
+        .trainer-selection { display: flex; justify-content: space-around; margin: 15px 0; padding-bottom: 15px; border-bottom: 2px dashed #ccc; }
+        .trainer-card { border: 3px solid #ccc; border-radius: 5px; padding: 10px; width: 45%; text-align: center; cursor: pointer; background: #fff; transition: 0.2s; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .trainer-card:hover { border-color: #ffcb05; background: #fffde6; }
+        .trainer-card.selected { border-color: #3b4cca; background: #e3f2fd; box-shadow: 0 0 8px rgba(59,76,202,0.5); }
+        .trainer-card img { width: 60px; height: 60px; object-fit: contain; }
+
+        /* Loja e Seleção */
+        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 15px; }
+        .poke-card { border: 3px solid #ccc; padding: 10px; border-radius: 5px; text-align: center; cursor: pointer; background: #fff; transition: 0.2s; display: flex; flex-direction: column; align-items: center; justify-content: space-between; min-height: 160px; }
+        .poke-card:hover { border-color: #ffcb05; background: #fffde6; }
+        .poke-card.selected { border-color: #4CAF50; background: #e8f5e9; }
+        .poke-card img { width: 65px; height: 65px; object-fit: contain; }
+        
+        /* Tipos e Cores */
+        .badge { padding: 3px 8px; border-radius: 3px; color: white; font-size: 11px; font-weight: bold; text-transform: uppercase; margin-top: 5px; }
+        .grass { background: #4CAF50; }
+        .fire { background: #F44336; }
+        .water { background: #2196F3; }
+        .electric { background: #FFEB3B; color: #333; }
+        .psychic { background: #E91E63; }
+        .fairy { background: #FFB7D5; color: #333; }
+        .normal { background: #A8A77A; color: white; }
+
+        button { background: #3b4cca; color: white; border: none; padding: 12px 20px; font-size: 16px; font-weight: bold; cursor: pointer; border-radius: 5px; width: 100%; margin-top: 15px; box-shadow: 0 4px #2a3795; -webkit-appearance: none; }
+        button:hover { background: #4a5ae9; }
+        button:active { box-shadow: 0 0px; transform: translateY(4px); }
+        button:disabled { background: #ccc; box-shadow: none; cursor: not-allowed; transform: none; }
+
+        /* Arena de Batalha */
+        .battle-arena { display: flex; justify-content: space-between; align-items: center; height: 260px; margin: 20px 0; background: #e0f2f1; border: 2px solid #004d40; border-radius: 5px; padding: 10px; position: relative; overflow: hidden; }
+        .fighter { width: 45%; text-align: center; position: relative; transition: transform 0.2s; display: flex; flex-direction: column; align-items: center; }
+        .fighter img { width: 90px; height: 90px; object-fit: contain; margin: 5px 0; }
+        
+        /* Balão de Fala Dinâmico */
+        .speech-bubble { background: #fff; border: 2px solid #333; border-radius: 8px; padding: 4px 8px; font-size: 11px; font-weight: bold; max-width: 130px; position: absolute; top: -15px; box-shadow: 2px 2px 0px #333; z-index: 10; display: none; }
+
+        .hp-bar-bg { background: #ddd; width: 100%; height: 12px; border-radius: 6px; margin-top: 5px; overflow: hidden; border: 1px solid #333; }
+        .hp-bar { background: #4CAF50; height: 100%; width: 100%; transition: width 0.3s; }
+        .log { background: #333; color: #fff; padding: 10px; height: 120px; overflow-y: auto; border-radius: 5px; font-size: 12px; line-height: 1.4; }
+        
+        .trainer-banner { font-size: 11px; color: #555; background: #eee; padding: 2px 6px; border-radius: 10px; margin-bottom: 4px; font-weight: bold; }
+
+        /* Animações */
+        .attack-left { animation: dashLeft 0.3s ease-in-out; }
+        .attack-right { animation: dashRight 0.3s ease-in-out; }
+        .hurt { animation: shake 0.2s ease-in-out 2; }
+
+        @keyframes dashLeft {
+            0% { transform: translateX(0); }
+            50% { transform: translateX(40px) scale(1.1); }
+            100% { transform: translateX(0); }
+        }
+        @keyframes dashRight {
+            0% { transform: translateX(0); }
+            50% { transform: translateX(-40px) scale(1.1); }
+            100% { transform: translateX(0); }
+        }
+        @keyframes shake {
+            0% { transform: translateX(0); }
+            25% { transform: translateX(-5px); filter: brightness(0.5) sepia(1) hue-rotate(-50deg); }
+            75% { transform: translateX(5px); filter: brightness(0.5) sepia(1) hue-rotate(-50deg); }
+            100% { transform: translateX(0); }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <div style="display: flex; justify-content: space-between; font-weight: bold; border-bottom: 2px solid #333; padding-bottom: 5px;">
+            <span>Coins: $<span id="coin-count">298</span></span>
+            <span>Sua Equipe: <span id="team-count">0</span>/3</span>
+        </div>
+
+        <!-- TELA 1: SELEÇÃO DE TREINADOR E LOJA -->
+        <div id="screen-shop" class="screen active">
+            <h2 style="margin-bottom: 5px;">1. Escolha seu Treinador</h2>
+            <div class="trainer-selection">
+                <div id="trainer-red" class="trainer-card" onclick="selectTrainer('Red')">
+                    <img src="https://img.pokemondb.net/sprites/trainers/red.png" alt="Red">
+                    <div style="font-weight: bold; margin-top: 5px;">RED</div>
+                </div>
+                <div id="trainer-dawn" class="trainer-card" onclick="selectTrainer('Dawn')">
+                    <img src="https://img.pokemondb.net/sprites/trainers/pearl-diamond/dawn.png" alt="Dawn">
+                    <div style="font-weight: bold; margin-top: 5px;">DAWN</div>
+                </div>
+            </div>
+<h2>2. Monte sua Equipe (Escolha 3)</h2>
+            <div id="shop-grid" class="grid"></div>
+            <button id="btn-start-battle" disabled onclick="startBattle()">Iniciar Batalha!</button>
+        </div>
+
+    
+            
+            
+            
+           
+            
+        
+            
+        
+        <div id="screen-battle" class="screen">
+            <h2 id="battle-round">Batalha 1/3</h2>
+            <div class="battle-arena">
+                <!-- Jogador -->
+                <div id="player-sprite" class="fighter">
+                    <div id="player-bubble" class="speech-bubble">Pika!</div>
+                    <div id="player-trainer-tag" class="trainer-banner">Treinador: Red</div>
+                    <div id="player-name" style="font-weight: bold;">Pikachu</div>
+                    <span id="player-badge" class="badge">Tipo</span>
+                    <img id="player-img" src="" alt="player">
+                    <div class="hp-bar-bg"><div id="player-hp" class="hp-bar"></div></div>
+                </div>
+                <!-- VS -->
+                <div style="font-weight: bold; color: #777; font-size: 20px;">VS</div>
+                <!-- Oponente -->
+                <div id="enemy-sprite" class="fighter">
+                    <div id="enemy-bubble" class="speech-bubble">Grrr!</div>
+                    <div class="trainer-banner">Inimigo Clássico</div>
+                    <div id="enemy-name" style="font-weight: bold;">Inimigo</div>
+                    <span id="enemy-badge" class="badge">Tipo</span>
+                    <img id="enemy-img" src="" alt="enemy">
+                    <div class="hp-bar-bg"><div id="enemy-hp" class="hp-bar"></div></div>
+                </div>
+            </div>
+            <div id="battle-log" class="log">A batalha vai começar...</div>
+            <button id="btn-next" style="display:none;" onclick="nextStep()">Continuar</button>
+        </div>
+    </div>
+
+    <script>
+        const typeChart = {
+            fire: { grass: 2, water: 0.5, fire: 0.5, electric: 1, psychic: 1, fairy: 1, normal: 1 },
+            water: { fire: 2, grass: 0.5, water: 0.5, electric: 1, psychic: 1, fairy: 1, normal: 1 },
+            grass: { water: 2, fire: 0.5, grass: 0.5, electric: 1, psychic: 1, fairy: 1, normal: 1 },
+            electric: { water: 2, grass: 0.5, fire: 1, electric: 0.5, psychic: 1, fairy: 1, normal: 1 },
+            psychic: { fire: 1, water: 1, grass: 1, electric: 1, psychic: 0.5, fairy: 1, normal: 1 },
+            fairy: { fire: 0.5, water: 1, grass: 1, electric: 1, psychic: 1, fairy: 1, normal: 1 }, 
+            normal: { fire: 1, water: 1, grass: 1, electric: 1, psychic: 1, fairy: 1, normal: 1 }
+        };
+
+        const pokemonDB = [
+            { id: 0, name: "Bulbasaur", type: "grass", img: "https://projectpokemon.org/images/normal-sprite/bulbasaur.gif", hp: 60, atk: 12, price: 0, owned: true, quote: "Bulba-Saur! 🍃" },
+            { id: 1, name: "Charmander", type: "fire", img: "https://projectpokemon.org/images/normal-sprite/charmander.gif", hp: 55, atk: 14, price: 0, owned: true, quote: "Char-mander! 🔥" },
+            { id: 2, name: "Squirtle", type: "water", img: "https://projectpokemon.org/images/normal-sprite/squirtle.gif", hp: 65, atk: 11, price: 0, owned: true, quote: "Squirtle-Squir! 💧" },
+            { id: 3, name: "Pikachu", type: "electric", img: "https://projectpokemon.org/images/normal-sprite/pikachu.gif", hp: 55, atk: 18, price: 20, owned: false, quote: "Pika-CHUUU! ⚡" },
+            { id: 4, name: "Gyarados", type: "water", img: "https://projectpokemon.org/images/normal-sprite/gyarados.gif", hp: 95, atk: 22, price: 40, owned: false, quote: "GBAAAUUURRGGH! 🌊" },
+            { id: 5, name: "Mewtwo", type: "psychic", img: "https://projectpokemon.org/images/normal-sprite/mewtwo.gif", hp: 120, atk: 28, price: 80, owned: false, quote: "Meros humanos... 🔮" },
+            { id: 6, name: "Diancie ✨", type: "fairy", img: "https://projectpokemon.org/images/shiny-sprite/diancie.gif", hp: 110, atk: 26, price: 90, owned: false, quote: "Brilhe, Diamante! ✨" },
+            { id: 7, name: "Arceus", type: "normal", img: "https://projectpokemon.org/images/normal-sprite/arceus.gif", hp: 150, atk: 32, price: 120, owned: false, quote: "Eu julgo este mundo! 🙏" },
+            { id: 8, name: "M-Gardevoir ✨", type: "fairy", img: "https://projectpokemon.org/images/shiny-sprite/gardevoir-mega.gif", hp: 130, atk: 35, price: 130, owned: false, quote: "Força Psíquica Total! 🌸" },
+            { id: 9, name: "Charizard", type: "fire", img: "https://projectpokemon.org/images/normal-sprite/charizard.gif", hp: 115, atk: 25, price: 60, owned: false, quote: "GROOOOAR! 💥" },
+            { id: 10, name: "M-Charizard X", type: "fire", img: "https://projectpokemon.org/images/normal-sprite/charizard-megax.gif", hp: 160, atk: 45, price: 140, owned: false, quote: "Chamas Azuis Ativar! 💙" },
+            { id: 11, name: "M-Charizard Y", type: "fire", img: "https://projectpokemon.org/images/normal-sprite/charizard-megay.gif", hp: 150, atk: 48, price: 145, owned: false, quote: "Calor do Sol Absoluto!☀️" },
+            { id: 12, name: "Raichu", type: "electric", img: "https://projectpokemon.org/images/normal-sprite/raichu.gif", hp: 90, atk: 24, price: 45, owned: false, quote: "Rai-Chu! ⚡" },
+            { id: 13, name: "M-Raichu X", type: "electric", img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/shiny/26.gif", hp: 140, atk: 40, price: 110, owned: false, quote: "Faíscas Roxas Shiny! ☄️" },
+            { id: 14, name: "M-Raichu Y", type: "electric", img: "https://projectpokemon.org/images/normal-sprite/raichu-alola.gif", hp: 130, atk: 44, price: 115, owned: false, quote: "Surfando nos Raios! 🏄‍♂️" },
+            { id: 15, name: "Dragonite", type: "normal", img: "https://projectpokemon.org/images/normal-sprite/dragonite.gif", hp: 140, atk: 34, price: 95, owned: false, quote: "Graa-nuuu! 🐲" },
+            { id: 16, name: "M-Dragonite ✨", type: "fire", img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/shiny/149.gif", hp: 200, atk: 55, price: 180, owned: false, quote: "Impacto Meteoro Verde! 💫" },
+            { id: 17, name: "M-Diancie ✨", type: "fairy", img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/shiny/10075.png", hp: 180, atk: 52, price: 175, owned: false, quote: "Realeza de Cristal! 👑" },
+            { id: 18, name: "Meloetta ✨", type: "psychic", img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/shiny/648.gif", hp: 150, atk: 46, price: 150, owned: false, quote: "Laaa~ ♪ Lalala~ 🎤" },
+            { id: 19, name: "Rayquaza", type: "normal", img: "https://projectpokemon.org/images/normal-sprite/rayquaza.gif", hp: 250, atk: 70, price: 230, owned: false, quote: "O mestre de Hoenn! 🐉" },
+            { id: 20, name: "M-Rayquaza ✨", type: "fire", img: "https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/shiny/10079.png", hp: 350, atk: 99, price: 290, owned: false, quote: "ASCENSÃO DO DRAGÃO TOTAL!!! 🌌" }
+        ];
+
+        let coins = 298; 
+        let selectedTrainer = null;
+        let selectedTeam = [];
+        let playerTeamData = []; 
+        let enemyTeamData = [];
+        let currentRound = 0;
+        let isBattleOver = false;
+
+        function selectTrainer(trainerName) {
+            selectedTrainer = trainerName;
+            document.getElementById('trainer-red').classList.remove('selected');
+            document.getElementById('trainer-dawn').classList.remove('selected');
+            if(trainerName === 'Red') document.getElementById('trainer-red').classList.add('selected');
+            if(trainerName === 'Dawn') document.getElementById('trainer-dawn').classList.add('selected');
+            checkReadyState();
+        }
+
+        function renderShop() {
+            const grid = document.getElementById('shop-grid');
+            grid.innerHTML = '';
+            document.getElementById('coin-count').innerText = coins;
+            document.getElementById('team-count').innerText = selectedTeam.length;
+
+            pokemonDB.forEach(poke => {
+                const card = document.createElement('div');
+                card.className = `poke-card ${selectedTeam.includes(poke.id) ? 'selected' : ''}`;
+                
+                let actionHTML = poke.owned 
+                    ? `<small style="color:green; font-weight:bold; margin-top:5px;">Disponível</small>` 
+                    : `<button style="margin:5px 0 0 0; padding:6px; font-size:11px;" onclick="buyPokemon(event, ${poke.id}, ${poke.price})">Comprar $${poke.price}</button>`;
+
+                card.innerHTML = `
+                    <img src="${poke.img}" alt="${poke.name}">
+                    <strong style="margin-top:3px; font-size:12px;">${poke.name}</strong>
+                    <span class="badge ${poke.type}">${poke.type}</span>
+                    <p style="font-size:11px; margin: 3px 0;">HP:${poke.hp} ATK:${poke.atk}</p>
+                    ${actionHTML}
+                `;
+                
+                if (poke.owned) {
+                    card.onclick = () => selectPokemon(poke.id);
+                }
+                grid.appendChild(card);
+            });
+            checkReadyState();
+        }
+
+        function buyPokemon(e, id, price) {
+            e.stopPropagation(); 
+            if (coins >= price) {
+                coins -= price;
+                pokemonDB[id].owned = true;
+                renderShop();
+            } else {
+                alert("Moedas insuficientes!");
+            }
+        }
+
+        function selectPokemon(id) {
+            const index = selectedTeam.indexOf(id);
+            if (index > -1) {
+                selectedTeam.splice(index, 1);
+            } else {
+                if (selectedTeam.length < 3) selectedTeam.push(id);
+            }
+            renderShop();
+        }
+
+        function checkReadyState() {
+            document.getElementById('btn-start-battle').disabled = !(selectedTrainer && selectedTeam.length === 3);
+        }
+
+        function startBattle() {
+            document.getElementById('screen-shop').classList.remove('active');
+            document.getElementById('screen-battle').classList.add('active');
+            document.getElementById('player-trainer-tag').innerText = `Treinador: ${selectedTrainer}`;
+            
+            playerTeamData = selectedTeam.map(id => ({ ...pokemonDB.find(p => p.id === id) }));
+            enemyTeamData = [];
+            for(let i=0; i<3; i++) {
+                let randomPoke = pokemonDB[Math.floor(Math.random() * pokemonDB.length)];
+                enemyTeamData.push({ ...randomPoke });
+            }
+
+            currentRound = 0;
+            isBattleOver = false;
+            document.getElementById('battle-log').innerHTML = `O Treinador <b>${selectedTrainer}</b> mandou sua equipe de elite!`;
+            setupRound();
+        }
+
+        function setupRound() {
+            if (currentRound >= 3 || playerTeamData.length === 0 || enemyTeamData.length === 0) {
+                endBattle();
+                return;
+            }
+            document.getElementById('battle-round').innerText = `Batalha ${currentRound + 1}/3`;
+            document.getElementById('btn-next').style.display = 'block';
+            document.getElementById('btn-next').innerText = "Próximo Turno!";
+            updateScreenStats();
+        }
+
+        function updateScreenStats() {
+            let p = playerTeamData[0];
+            let e = enemyTeamData[0];
+
+            if(p && e) {
+                document.getElementById('player-name').innerText = p.name;
+                document.getElementById('player-img').src = p.img;
+                document.getElementById('player-badge').className = `badge ${p.type}`;
+                document.getElementById('player-badge').innerText = p.type;
+                document.getElementById('player-hp').style.width = `${(p.hp / pokemonDB[p.id].hp) * 100}%`;
+
+                document.getElementById('enemy-name').innerText = e.name;
+                document.getElementById('enemy-img').src = e.img;
+                document.getElementById('enemy-badge').className = `badge ${e.type}`;
+                document.getElementById('enemy-badge').innerText = e.type;
+                document.getElementById('enemy-hp').style.width = `${(e.hp / pokemonDB[e.id].hp) * 100}%`;
+            }
+        }
+
+        function showBubbles(pQuote, eQuote) {
+            const pBubble = document.getElementById('player-bubble');
+            const eBubble = document.getElementById('enemy-bubble');
+            
+            pBubble.innerText = pQuote;
+            eBubble.innerText = eQuote;
+            
+            pBubble.style.display = 'block';
+            eBubble.style.display = 'block';
+            
+            setTimeout(() => {
+                pBubble.style.display = 'none';
+                eBubble.style.display = 'none';
+            }, 1200);
+        }
+
+        function nextStep() {
+            if (isBattleOver) {
+                selectedTeam = [];
+                document.getElementById('screen-battle').classList.remove('active');
+                document.getElementById('screen-shop').classList.add('active');
+                renderShop();
+                return;
+            }
+
+            let p = playerTeamData[0];
+            let e = enemyTeamData[0];
+            const log = document.getElementById('battle-log');
+
+            let playerMod = typeChart[p.type][e.type] || 1;
+            let enemyMod = typeChart[e.type][p.type] || 1;
+
+            let finalPlayerAtk = Math.round(p.atk * playerMod);
+            let finalEnemyAtk = Math.round(e.atk * enemyMod);
+
+            let playerEffText = playerMod > 1 ? " 🔥 Super efetivo!" : (playerMod < 1 ? " 🛡️ Não é muito efetivo..." : "");
+            let enemyEffText = enemyMod > 1 ? " 🔥 Super efetivo!" : (enemyMod < 1 ? " 🛡️ Não é muito efetivo..." : "");
+
+            showBubbles(p.quote || "Gritar!", e.quote || "Grrr!");
+
+            document.getElementById('player-sprite').classList.add('attack-left');
+            document.getElementById('enemy-sprite').classList.add('attack-right');
+
+            setTimeout(() => {
+                p.hp -= finalEnemyAtk;
+                e.hp -= finalPlayerAtk;
+
+                if (p.hp < 0) p.hp = 0;
+                if (e.hp < 0) e.hp = 0;
+
+                log.innerHTML = `🗣️ <b>${p.name}:</b> "${p.quote}"<br>` +
+                                `⚔️ <b>${p.name}</b> causou <b>${finalPlayerAtk}</b> de dano!${playerEffText}<br><br>` +
+                                `🗣️ <b>${e.name}:</b> "${e.quote}"<br>` +
+                                `⚔️ <b>${e.name}</b> causou <b>${finalEnemyAtk}</b> de dano!${enemyEffText}`;
+                
+                document.getElementById('player-sprite').classList.remove('attack-left');
+                document.getElementById('enemy-sprite').classList.remove('attack-right');
+                document.getElementById('player-sprite').classList.add('hurt');
+                document.getElementById('enemy-sprite').classList.add('hurt');
+                
+                updateScreenStats();
+            }, 300);
+
+            setTimeout(() => {
+                document.getElementById('player-sprite').classList.remove('hurt');
+                document.getElementById('enemy-sprite').classList.remove('hurt');
+
+                if (p.hp <= 0 || e.hp <= 0) {
+                    if (p.hp <= 0 && e.hp <= 0) {
+                        log.innerHTML += "<br><br>💥 Ambos os Pokémons desmaiaram juntos!";
+                        playerTeamData.shift();
+                        enemyTeamData.shift();
+                    } else if (p.hp <= 0) {
+                        log.innerHTML += `<br><br>💀 Seu <b>${p.name}</b> desmaiou!`;
+                        playerTeamData.shift();
+                    } else {
+                        log.innerHTML += `<br><br>💀 O <b>${e.name}</b> inimigo desmaiou!`;
+                        enemyTeamData.shift();
+                    }
+                    currentRound++;
+                    
+                    if (playerTeamData.length === 0 || enemyTeamData.length === 0) {
+                        endBattle();
+                    } else {
+                        setTimeout(setupRound, 1200);
+                    }
+                }
+            }, 600);
+        }
+
+        function endBattle() {
+            isBattleOver = true;
+            const log = document.getElementById('battle-log');
+            const btn = document.getElementById('btn-next');
+            btn.style.display = 'block';
+            btn.innerText = "Voltar para a Loja";
+
+            if (playerTeamData.length > 0) {
+                coins += 35; 
+                log.innerHTML = `🎉 <b>VITÓRIA!</b> O treinador <b>${selectedTrainer}</b> faturou <b>$35 moedas</b>!`;
+            } else {
+                coins += 12; 
+                log.innerHTML = `❌ <b>DERROTA!</b> O treinador <b>${selectedTrainer}</b> ganhou <b>$12 moedas</b>.`;
+            }
+            document.getElementById('coin-count').innerText = coins;
+        }
+
+        renderShop();
+    </script>
+</body>
+</html>
